@@ -35,7 +35,7 @@ public struct Shimmer: ViewModifier {
         Group {
             
             content
-                .modifier(AnimatedMask(phase: phase, invertedMask: invertedMask)
+                .modifier(AnimatedMask(phase: phase, invertedMask: invertedMask, completion: completion)
                             .animation(Animation.animation(movement: movement, contentSize: contentSize, delay: delay, repeats: repeats, bounces: bounces)))
                 .onAppear { phase = 0.8 }
             
@@ -45,11 +45,6 @@ public struct Shimmer: ViewModifier {
                         .fill(.clear)
                         .preference(key: ContentSizeSetterPreferenceKey.self, value: [ContentSizeSetterPreferenceData(size: geoProxy.size)])
                 }, alignment: .center)
-                .onAnimationCompleted(for: phase) {
-                    
-                    guard !repeats else { return }
-                    completion?()
-                }
         }
         .onPreferenceChange(ContentSizeSetterPreferenceKey.self, perform: { prefs in
             
@@ -60,16 +55,32 @@ public struct Shimmer: ViewModifier {
     /// An animatable modifier to interpolate between `phase` values.
     struct AnimatedMask: AnimatableModifier {
         var phase: CGFloat = 0
+        private var targetValue: CGFloat
         var invertedMask: Bool = false
+        var completion: ShimmerCompletion?
         
-        internal init(phase: CGFloat, invertedMask: Bool = false) {
+        internal init(phase: CGFloat, invertedMask: Bool = false, completion: ShimmerCompletion? = nil) {
             self.phase = phase
+            self.targetValue = phase
             self.invertedMask = invertedMask
+            self.completion = completion
         }
         
         var animatableData: CGFloat {
             get { phase }
-            set { phase = newValue }
+            set {
+                phase = newValue
+//                print("phase \(phase)")
+                notifyCompletionIfFinished()
+            }
+        }
+        
+        private func notifyCompletionIfFinished() {
+            guard animatableData == targetValue else { return }
+
+            DispatchQueue.main.async {
+                self.completion?()
+            }
         }
         
         func body(content: Content) -> some View {
@@ -120,7 +131,7 @@ public extension View {
         active: Bool = true, movement: Shimmer.AnimationMovement = .constantDuration(1.5), delay: Double = 0, bounces: Bool = false, invertedMask: Bool = false, repeats: Bool = true, completion: ShimmerCompletion? = nil) -> some View {
             
             if active, #available(iOS 14.0, *) {
-                modifier(Shimmer(movement: movement, delay: delay, bounces: bounces, invertedMask: invertedMask, repeats: repeats))
+                modifier(Shimmer(movement: movement, delay: delay, bounces: bounces, invertedMask: invertedMask, repeats: repeats, completion: completion))
             } else {
                 self
             }
